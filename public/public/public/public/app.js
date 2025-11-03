@@ -2,55 +2,72 @@
 const cfg = window.APP_CONFIG;
 const supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
 
-// --- Auth UI ---
+// --- helpers ---
+const $ = (id) => document.getElementById(id);
 const ui = {
-  loggedOut: document.getElementById('logged-out'),
-  loggedIn: document.getElementById('logged-in'),
-  whoami: document.getElementById('whoami'),
-  email: document.getElementById('email'),
-  password: document.getElementById('password'),
-  btnSignIn: document.getElementById('btn-signin'),
-  btnSignOut: document.getElementById('btn-signout'),
-  app: document.getElementById('app'),
-  storeSelect: document.getElementById('storeSelect'),
-  monthInput: document.getElementById('monthInput'),
-  btnLoad: document.getElementById('btn-load'),
-  btnSave: document.getElementById('btn-save'),
-  calendar: document.getElementById('calendar'),
-  summary: document.getElementById('summary'),
+  status: $('status'),
+  loggedOut: $('logged-out'),
+  loggedIn: $('logged-in'),
+  whoami: $('whoami'),
+  email: $('email'),
+  password: $('password'),
+  btnSignIn: $('btn-signin'),
+  btnSignOut: $('btn-signout'),
+  app: $('app'),
+  storeSelect: $('storeSelect'),
+  monthInput: $('monthInput'),
+  btnLoad: $('btn-load'),
+  btnSave: $('btn-save'),
+  calendar: $('calendar'),
+  summary: $('summary'),
 };
 
+function setStatus(msg) { ui.status.textContent = msg; console.log('[STATUS]', msg); }
+function setError(msg)  { ui.status.textContent = `⚠️ ${msg}`; console.error(msg); }
+
 let session = null;
-let edited = {}; // { 'YYYY-MM-DD': {transactions, net_sales, gross_margin} }
+let edited = {};
 let active = { storeId: null, month: null, versionId: null };
 
 function fmt(n, d=0){ if(n===null||n===undefined||Number.isNaN(n)) return '—'; return Number(n).toLocaleString(undefined,{minimumFractionDigits:d, maximumFractionDigits:d}); }
 function pct(a,b){ if(!b) return 0; return (a/b)*100; }
 function clsHit(actual, goal){ if(goal === 0) return ''; if(actual >= goal) return 'hit'; if(actual >= 0.95*goal) return 'miss'; return 'goal'; }
 
+// --- auth ---
 async function refreshAuthUI(){
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) { setError('Auth session error: ' + error.message); return; }
   session = data.session;
+
   if (session?.user) {
     ui.loggedOut.classList.add('hidden');
     ui.loggedIn.classList.remove('hidden');
     ui.app.classList.remove('hidden');
     ui.whoami.textContent = session.user.email;
+    setStatus('Signed in as ' + session.user.email);
     await loadStores();
   } else {
     ui.loggedOut.classList.remove('hidden');
     ui.loggedIn.classList.add('hidden');
     ui.app.classList.add('hidden');
+    setStatus('Not signed in.');
   }
 }
 
 ui.btnSignIn.onclick = async () => {
   const email = ui.email.value.trim();
   const password = ui.password.value;
-  if (!email || !password) return alert('Enter email and password.');
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return alert(error.message);
-  await refreshAuthUI();
+  if (!email || !password) return setError('Enter email and password.');
+  ui.btnSignIn.disabled = true; setStatus('Signing in…');
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return setError('Sign-in failed: ' + error.message);
+    await refreshAuthUI();
+  } catch (e) {
+    setError('Sign-in exception: ' + e.message);
+  } finally {
+    ui.btnSignIn.disabled = false;
+  }
 };
 
 ui.btnSignOut.onclick = async () => {
@@ -58,36 +75,36 @@ ui.btnSignOut.onclick = async () => {
   await refreshAuthUI();
 };
 
-// --- Stores ---
+// --- stores ---
 async function loadStores(){
-  // get stores user can access via v_user_stores (needs RLS open as we configured)
+  setStatus('Loading stores…');
   const { data, error } = await supabase.from('v_user_stores').select('*');
-  if (error) { console.error(error); alert('Could not load stores'); return; }
+  if (error) { setError('Load stores failed: ' + error.message); return; }
   ui.storeSelect.innerHTML = '';
   for (const r of data) {
     const opt = document.createElement('option');
-    opt.value = r.id;
-    opt.textContent = `${r.id} — ${r.name}`;
+    opt.value = r.id; opt.textContent = `${r.id} — ${r.name}`;
     ui.storeSelect.appendChild(opt);
   }
   if (!ui.monthInput.value) {
-    const today = new Date();
-    const ym = today.toISOString().slice(0,7);
+    const ym = new Date().toISOString().slice(0,7);
     ui.monthInput.value = ym;
   }
+  setStatus('Stores loaded.');
 }
 
 ui.btnLoad.onclick = () => {
   active.storeId = ui.storeSelect.value;
-  active.month = ui.monthInput.value; // YYYY-MM
-  if (!active.storeId || !active.month) return alert('Pick a store and month');
+  active.month = ui.monthInput.value;
+  if (!active.storeId || !active.month) return setError('Pick a store and month');
   loadMonth();
 };
 
 async function loadMonth(){
   edited = {};
   ui.calendar.innerHTML = '';
-  ui.summary.textContent = 'Loading...';
+  ui.summary.textContent = 'Loading…';
+  setStatus(`Loading ${active.storeId} — ${active.month}`);
 
   const { data, error } = await supabase
     .from('v_calendar_month')
@@ -96,22 +113,18 @@ async function loadMonth(){
     .eq('month', active.month)
     .order('date', { ascending: true });
 
-  if (error) { console.error(error); ui.summary.textContent = 'Failed to load month.'; return; }
-  if (!data || data.length === 0) { ui.summary.textContent = 'No forecast found for this month.'; return; }
+  if (error) { setError('Load month failed: ' + error.message); ui.summary.textContent = 'Failed to load month.'; return; }
+  if (!data || data.length === 0) { ui.summary.textContent = 'No forecast found for this month.'; setStatus('No forecast for month'); return; }
 
-  // Keep the version id for context
   active.versionId = data[0].version_id;
 
-  // Build grid
+  // pad start to correct day-of-week
   const firstDow = new Date(data[0].date + 'T00:00:00').getDay();
-  // pad start
-  for (let i=0;i<firstDow;i++){
-    const pad = document.createElement('div');
-    pad.className = 'cell';
-    ui.calendar.appendChild(pad);
+  for (let i=0;i<firstDow;i++) {
+    const pad = document.createElement('div'); pad.className = 'cell'; ui.calendar.appendChild(pad);
   }
 
-  let mtTxnGoal = 0, mtSalesGoal = 0, mtTxnAct = 0, mtSalesAct = 0;
+  let mtTxnGoal=0, mtSalesGoal=0, mtTxnAct=0, mtSalesAct=0;
 
   for (const d of data) {
     mtTxnGoal += d.txn_goal || 0;
@@ -120,12 +133,10 @@ async function loadMonth(){
     mtSalesAct += d.sales_actual || 0;
 
     const cell = document.createElement('div');
-    cell.className = 'cell';
-    cell.dataset.date = d.date;
+    cell.className = 'cell'; cell.dataset.date = d.date;
 
     const header = document.createElement('div');
-    header.className = 'date';
-    header.textContent = d.date.slice(8); // day num
+    header.className = 'date'; header.textContent = d.date.slice(8);
     cell.appendChild(header);
 
     const kpis = document.createElement('div');
@@ -163,13 +174,14 @@ async function loadMonth(){
     &nbsp; | &nbsp; Sales: ${fmt(mtSalesAct,2)} / ${fmt(mtSalesGoal,2)}
     &nbsp; | &nbsp; ${fmt(pct(mtSalesAct, mtSalesGoal),0)}% to goal
   `;
+  setStatus('Month loaded.');
 }
 
-// Save via Edge Function
+// Save actuals through edge function
 ui.btnSave.onclick = async () => {
   const rows = Object.entries(edited).map(([date, vals]) => ({ date, ...vals }));
-  if (rows.length === 0) return alert('No changes to save.');
-  ui.btnSave.disabled = true;
+  if (rows.length === 0) return setStatus('No changes to save.');
+  ui.btnSave.disabled = true; setStatus('Saving…');
   try {
     const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`, {
       method: 'POST',
@@ -183,13 +195,21 @@ ui.btnSave.onclick = async () => {
     if (!resp.ok) throw new Error(json.error || 'Save failed');
     edited = {};
     await loadMonth();
+    setStatus('Saved.');
   } catch (e) {
-    alert(e.message);
+    setError('Save failed: ' + e.message);
   } finally {
     ui.btnSave.disabled = false;
   }
 };
 
-// Initial
-refreshAuthUI();
-supabase.auth.onAuthStateChange(refreshAuthUI);
+// bootstrap
+(async () => {
+  if (!cfg?.SUPABASE_URL || !cfg?.SUPABASE_ANON_KEY) {
+    setError('Missing config in public/config.js');
+    return;
+  }
+  setStatus('Initializing…');
+  await refreshAuthUI();
+  supabase.auth.onAuthStateChange(refreshAuthUI);
+})();
