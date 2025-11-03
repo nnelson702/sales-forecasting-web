@@ -4,9 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sales Forecasting</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <script src="./config.js"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/styles.css" />
+
+  <!-- ✅ UMD build exposes window.supabase (NOT the ESM build) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <!-- Your config first, then app. Use defer so they run after HTML is parsed. -->
+  <script defer src="/config.js"></script>
+  <script defer src="/app.js"></script>
 </head>
 <body>
   <header>
@@ -45,7 +52,5 @@
   <footer>
     <small>© Skye Bridge LLC — ACE Helpful Place</small>
   </footer>
-
-  <script src="./app.js"></script>
 </body>
 </html>
