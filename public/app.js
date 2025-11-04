@@ -141,7 +141,7 @@ async function loadMonth(){
     top.appendChild(btn);
     cell.appendChild(top);
 
-    // Calendar lines (exact spec)
+    // Calendar lines (no labels)
     const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
     const lines = document.createElement('div');
     lines.className='lines';
@@ -164,7 +164,36 @@ async function loadMonth(){
   setStatus('Month loaded.');
 }
 
-// ---------- MODAL (cards mimic your theme) ----------
+// ---------- SAVE HELPERS ----------
+async function tryEdgeFunctionUpsert(storeId, rows){
+  const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`,{
+    method:'POST',
+    headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${cfg.SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ storeId, rows })
+  });
+  const text = await resp.text();
+  let json; try{ json = text ? JSON.parse(text) : {}; }catch{ json = { raw:text }; }
+  if (!resp.ok) throw new Error(json?.error || json?.message || `Edge function failed (${resp.status})`);
+  return json;
+}
+
+async function directTableUpsert(storeId, rows){
+  // rows: [{date, transactions, net_sales, gross_margin}]
+  const shaped = rows.map(r=>({
+    store_id: storeId,
+    date: r.date,
+    transactions: r.transactions ?? null,
+    net_sales: r.net_sales ?? null,
+    gross_margin: r.gross_margin ?? null
+  }));
+  const { error } = await supabase
+    .from('actual_daily')
+    .upsert(shaped, { onConflict: 'store_id,date' });
+  if (error) throw new Error('Direct upsert failed: ' + error.message);
+  return { ok:true };
+}
+
+// ---------- MODAL ----------
 function openDayModal(d){
   ui.modalTitle.textContent = `${d.date} — Day details`;
   const pSales = pct(d.sales_actual, d.sales_goal);
@@ -176,7 +205,6 @@ function openDayModal(d){
   ui.modalKpis.innerHTML = `
     <div class="columns">
 
-      <!-- Transactions -->
       <div class="card" id="card-txn">
         <div class="card-title">Transactions</div>
         <div class="pair">
@@ -192,39 +220,36 @@ function openDayModal(d){
         <div id="txp" class="pct ${percentClass(pct(d.txn_actual,d.txn_goal))}">${fmt(pct(d.txn_actual,d.txn_goal),2)}%</div>
       </div>
 
-      <!-- Sales -->
       <div class="card" id="card-sales">
         <div class="card-title">Sales</div>
         <div class="pair">
           <div>
-            <div class="label">Goal</div>
+            <div class="label">Goal ($)</div>
             <input id="slg" class="pill" type="number" step="0.01" value="${d.sales_goal ?? ''}" readonly>
           </div>
           <div>
-            <div class="label">Actual</div>
+            <div class="label">Actual ($)</div>
             <input id="sla" class="pill" type="number" step="0.01" value="${d.sales_actual ?? ''}">
           </div>
         </div>
         <div id="slp" class="pct ${percentClass(pct(d.sales_actual,d.sales_goal))}">${fmt(pct(d.sales_actual,d.sales_goal),2)}%</div>
       </div>
 
-      <!-- ATV -->
       <div class="card" id="card-atv">
         <div class="card-title">ATV</div>
         <div class="pair">
           <div>
-            <div class="label">Goal</div>
+            <div class="label">Goal ($)</div>
             <input id="avg" class="pill" type="number" step="0.01" value="${d.atv_goal ?? ''}" readonly>
           </div>
           <div>
-            <div class="label">Actual</div>
+            <div class="label">Actual ($)</div>
             <input id="ava" class="pill" type="number" step="0.01" value="${atvActual ?? ''}" readonly>
           </div>
         </div>
         <div id="avp" class="pct ${percentClass(pct(atvActual,d.atv_goal))}">${fmt(pct(atvActual,d.atv_goal),2)}%</div>
       </div>
 
-      <!-- Margin (no % footer) -->
       <div class="card" id="card-margin">
         <div class="card-title">Margin</div>
         <div class="pair">
@@ -262,15 +287,12 @@ function openDayModal(d){
     const s = Number(sla.value||0);
     const mg= Number(m$.value||0);
 
-    // ATV actual & % to goal
     const atvA = (t>0) ? (s/t) : 0;
     avA.value = t>0 ? atvA.toFixed(2) : '';
     setPct(avp, pct(atvA, avg));
 
-    // Margin %
     mpc.value = (s>0) ? (mg/s*100).toFixed(2) : '';
 
-    // Percent to goal rows
     setPct(txp, pct(t, txg));
     setPct(slp, pct(s, slg));
   };
@@ -282,22 +304,24 @@ function openDayModal(d){
   ui.btnSaveModal.onclick = async ()=>{
     ui.btnSaveModal.disabled = true;
     try{
-      const row = {
+      const rows = [{
         date: d.date,
         transactions: txa.value===''?null:Number(txa.value),
         net_sales:   sla.value===''?null:Number(sla.value),
         gross_margin:m$.value===''?null:Number(m$.value)
-      };
-      const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`,{
-        method:'POST',
-        headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${cfg.SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ storeId: active.storeId, rows:[row] })
-      });
-      const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error||'Save failed');
+      }];
+
+      // try edge function first; if it fails, fall back to direct upsert
+      try{
+        await tryEdgeFunctionUpsert(active.storeId, rows);
+      }catch(e1){
+        console.warn('Edge function upsert failed, falling back:', e1.message);
+        await directTableUpsert(active.storeId, rows);
+      }
+
       closeModal();
       await loadMonth();
-      setStatus('Saved day.');
+      setStatus('Saved actuals for ' + d.date);
     }catch(e){ setError(e.message); }
     finally{ ui.btnSaveModal.disabled=false; }
   };
