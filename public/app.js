@@ -1,7 +1,13 @@
 /* global window, document */
 const cfg = window.APP_CONFIG;
+
+// Keep the user signed in across refreshes, and refresh tokens automatically.
 const supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-  auth: { persistSession:false, storage:window.sessionStorage, autoRefreshToken:false }
+  auth: {
+    persistSession: true,
+    storage: window.localStorage,
+    autoRefreshToken: true
+  }
 });
 
 const $ = id => document.getElementById(id);
@@ -36,6 +42,7 @@ const pct = (a,b)=> (!b || b===0) ? 0 : (a/b)*100;
 const hide = el => { el.classList.remove('open'); el.classList.add('hidden'); el.setAttribute('aria-hidden','true'); };
 const show = el => { el.classList.remove('hidden'); el.classList.add('open'); el.setAttribute('aria-hidden','false'); };
 const percentClass = p => (p>=100 ? 'ok' : 'bad');
+const hitBgClass = (actual, goal) => ((actual||0) >= (goal||0) && (goal||0) > 0) ? 'bg-good' : 'bg-bad';
 
 let active={ storeId:null, month:null, versionId:null, monthRows:[] };
 
@@ -95,25 +102,61 @@ ui.btnLoad.onclick = ()=>{
   loadMonth();
 };
 
-// ---------- MONTH VIEW ----------
-function bgClassForDay(salesActual, salesGoal){
-  const hit = (salesActual||0) >= (salesGoal||0) && (salesGoal||0) > 0;
-  return hit ? 'bg-good' : 'bg-bad';
+// ---------- CALENDAR RENDER ----------
+function buildCellHTML(d){
+  const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
+
+  return `
+    <div class="date-row">
+      <div class="date">${d.date.slice(8)}</div>
+      <button class="drill" type="button">Details</button>
+    </div>
+    <div class="lines">
+      <div class="line"><span class="mono">${fmt(d.sales_goal,2)}</span></div>
+      <div class="line"><span class="mono">${fmt(d.txn_goal)}</span></div>
+      <div class="line"><span class="mono">${fmt(d.atv_goal,2)}${atvActual!==null?` • ${fmt(atvActual,2)}`:''}</span></div>
+      ${d.sales_actual ? `<div class="line"><span class="mono">${fmt(pct(d.sales_actual, d.sales_goal),2)}%</span></div>` : ``}
+    </div>
+  `;
+}
+
+function renderOrRebuildCell(d){
+  // Find existing cell by date; if not found, create one.
+  let cell = document.getElementById(`cell-${d.date}`);
+  const cls = `cell ${hitBgClass(d.sales_actual, d.sales_goal)}`;
+
+  if (!cell){
+    cell = document.createElement('div');
+    cell.id = `cell-${d.date}`;
+    cell.dataset.date = d.date;
+    cell.className = cls;
+    cell.innerHTML = buildCellHTML(d);
+    // attach click handler for Details button
+    cell.querySelector('.drill').addEventListener('click', ()=>openDayModal(d));
+    ui.calendar.appendChild(cell);
+  }else{
+    cell.className = cls;
+    cell.innerHTML = buildCellHTML(d);
+    cell.querySelector('.drill').addEventListener('click', ()=>openDayModal(d));
+  }
 }
 
 async function loadMonth(){
   ui.calendar.innerHTML=''; ui.summary.textContent='Loading…'; setStatus(`Loading ${active.storeId} — ${active.month}`);
+
   const { data, error } = await supabase.from('v_calendar_month')
     .select('*')
     .eq('store_id', active.storeId)
     .eq('month', active.month)
     .order('date', { ascending:true });
+
   if (error){ setError('Load month failed: ' + error.message); ui.summary.textContent='Failed to load month.'; return; }
   if (!data || data.length===0){ ui.summary.textContent='No forecast found for this month.'; setStatus('No forecast for month'); return; }
 
   active.versionId = data[0].version_id;
   active.monthRows = data;
 
+  // pad start of month
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
@@ -122,30 +165,7 @@ async function loadMonth(){
   for (const d of data){
     mtSalesGoal += d.sales_goal||0;
     mtSalesAct  += d.sales_actual||0;
-
-    const cell = document.createElement('div');
-    cell.className = `cell ${bgClassForDay(d.sales_actual, d.sales_goal)}`;
-    const top = document.createElement('div');
-    top.className='date-row';
-    const btn = document.createElement('button');
-    btn.className='drill'; btn.type='button'; btn.textContent='Details';
-    btn.addEventListener('click', ()=>openDayModal(d));
-    top.innerHTML = `<div class="date">${d.date.slice(8)}</div>`;
-    top.appendChild(btn);
-    cell.appendChild(top);
-
-    const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
-    const lines = document.createElement('div');
-    lines.className='lines';
-    lines.innerHTML = `
-      <div class="line"><span class="mono">${fmt(d.sales_goal,2)}</span></div>
-      <div class="line"><span class="mono">${fmt(d.txn_goal)}</span></div>
-      <div class="line"><span class="mono">${fmt(d.atv_goal,2)}${atvActual!==null?` • ${fmt(atvActual,2)}`:''}</span></div>
-      ${d.sales_actual ? `<div class="line"><span class="mono">${fmt(pct(d.sales_actual, d.sales_goal),2)}%</span></div>` : ``}
-    `;
-    cell.appendChild(lines);
-
-    ui.calendar.appendChild(cell);
+    renderOrRebuildCell(d);
   }
 
   ui.summary.innerHTML = `
@@ -170,10 +190,18 @@ async function upsertActuals(storeId, rows){
 }
 
 // ---------- MODAL ----------
-function openDayModal(d){
+function openDayModal(dInitial){
+  // get the latest reference for this date from active.monthRows
+  const idx = active.monthRows.findIndex(r=>r.date===dInitial.date);
+  let d = idx>=0 ? {...active.monthRows[idx]} : {...dInitial};
+
+  const paintBadge = ()=>{
+    const pSales = pct(d.sales_actual, d.sales_goal);
+    ui.modalBadge.textContent = (pSales >= 100) ? 'On / Above Goal' : (pSales >= 95 ? 'Near Goal' : 'Below Goal');
+  };
+
   ui.modalTitle.textContent = `${d.date} — Day details`;
-  const pSales = pct(d.sales_actual, d.sales_goal);
-  ui.modalBadge.textContent = (pSales >= 100) ? 'On / Above Goal' : (pSales >= 95 ? 'Near Goal' : 'Below Goal');
+  paintBadge();
 
   const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
   const marginPct = (d.sales_actual && d.margin_actual!=null) ? (d.margin_actual / d.sales_actual * 100) : null;
@@ -184,7 +212,6 @@ function openDayModal(d){
     </div>
 
     <div class="columns">
-
       <div class="card" id="card-txn">
         <div class="card-title">Transactions</div>
         <div class="pair">
@@ -219,7 +246,6 @@ function openDayModal(d){
           <div><div class="label">Margin $</div><input id="m$" class="pill" type="number" step="0.01" value="${d.margin_actual ?? ''}"></div>
         </div>
       </div>
-
     </div>
 
     <div class="notes">Notes (coming soon—will save to Day Notes)</div>
@@ -239,15 +265,21 @@ function openDayModal(d){
 
   const setPct = (el, val)=>{ el.textContent = `${fmt(val,2)}%`; el.className = `pct ${percentClass(val)}`; };
   const recompute = ()=>{
-    const t = Number(txa.value||0);
-    const s = Number(sla.value||0);
-    const mg= Number(m$.value||0);
+    d.txn_actual    = txa.value===''?null:Number(txa.value);
+    d.sales_actual  = sla.value===''?null:Number(sla.value);
+    d.margin_actual = m$.value===''?null:Number(m$.value);
+
+    const t = d.txn_actual ?? 0;
+    const s = d.sales_actual ?? 0;
+    const mg= d.margin_actual ?? 0;
+
     const atvA = (t>0) ? (s/t) : 0;
     avA.value = t>0 ? atvA.toFixed(4) : '';
     setPct(avp, pct(atvA, avg));
-    mpc.value = (s>0) ? (mg/s*100).toFixed(4) : '';
+    mpc.value = (s>0 && mg!=null) ? (mg/s*100).toFixed(4) : '';
     setPct(txp, pct(t, txg));
     setPct(slp, pct(s, slg));
+    paintBadge();
   };
   txa.addEventListener('input', recompute);
   sla.addEventListener('input', recompute);
@@ -258,16 +290,16 @@ function openDayModal(d){
   ui.btnSaveModal.onclick = async ()=>{
     ui.btnSaveModal.disabled = true;
     try{
+      // Persist
       const rows = [{
         date: d.date,
-        transactions: txa.value===''?null:Number(txa.value),
-        net_sales:   sla.value===''?null:Number(sla.value),
-        gross_margin:m$.value===''?null:Number(m$.value)
+        transactions: d.txn_actual,
+        net_sales:   d.sales_actual,
+        gross_margin:d.margin_actual
       }];
-
       await upsertActuals(active.storeId, rows);
 
-      // verify persisted
+      // Verify
       const { data:verify, error:vErr } = await supabase
         .from('actual_daily')
         .select('transactions,net_sales,gross_margin')
@@ -275,8 +307,21 @@ function openDayModal(d){
       if (vErr) throw new Error('Verify read failed: ' + vErr.message);
       if (!verify) throw new Error('Save appears to have failed (no row)');
 
+      // ---- Optimistic UI update (no page reload) ----
+      // Update in-memory monthRows
+      const i = active.monthRows.findIndex(x=>x.date===d.date);
+      if (i>=0){
+        active.monthRows[i] = {
+          ...active.monthRows[i],
+          txn_actual: d.txn_actual,
+          sales_actual: d.sales_actual,
+          margin_actual: d.margin_actual
+        };
+        // Re-render that day's tile immediately
+        renderOrRebuildCell(active.monthRows[i]);
+      }
+
       hide(ui.modal);
-      await loadMonth();
       setStatus(`Saved actuals for ${d.date}`);
     }catch(e){ setError(e.message); }
     finally{ ui.btnSaveModal.disabled=false; }
