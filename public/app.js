@@ -36,6 +36,7 @@ const fmt = (n,d=0)=> (n===null||n===undefined||Number.isNaN(n)) ? '—' :
 const pct = (a,b)=> (!b || b===0) ? 0 : (a/b)*100;
 const hide = el => { el.classList.remove('open'); el.classList.add('hidden'); el.setAttribute('aria-hidden','true'); };
 const show = el => { el.classList.remove('hidden'); el.classList.add('open'); el.setAttribute('aria-hidden','false'); };
+const percentClass = p => (p>=100 ? 'ok' : 'bad');
 
 // state
 let session=null;
@@ -140,11 +141,7 @@ async function loadMonth(){
     top.appendChild(btn);
     cell.appendChild(top);
 
-    // CALENDAR LINES (no labels), exactly as requested:
-    // 1) Sales Goal
-    // 2) Projected Transactions (Txn Goal)
-    // 3) ATV Goal • ATV Actual (actual only if exists)
-    // 4) % to NET Sales Goal (only when actual exists)
+    // Calendar lines (exact spec)
     const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
     const lines = document.createElement('div');
     lines.className='lines';
@@ -152,7 +149,7 @@ async function loadMonth(){
       <div class="line"><span class="mono">${fmt(d.sales_goal,2)}</span></div>
       <div class="line"><span class="mono">${fmt(d.txn_goal)}</span></div>
       <div class="line"><span class="mono">${fmt(d.atv_goal,2)}${atvActual!==null?` • ${fmt(atvActual,2)}`:''}</span></div>
-      ${d.sales_actual ? `<div class="line"><span class="mono">${fmt(pct(d.sales_actual, d.sales_goal),0)}%</span></div>` : ``}
+      ${d.sales_actual ? `<div class="line"><span class="mono">${fmt(pct(d.sales_actual, d.sales_goal),2)}%</span></div>` : ``}
     `;
     cell.appendChild(lines);
 
@@ -167,7 +164,7 @@ async function loadMonth(){
   setStatus('Month loaded.');
 }
 
-// ---------- MODAL (4 columns; no “$ to goal”) ----------
+// ---------- MODAL (cards mimic your theme) ----------
 function openDayModal(d){
   ui.modalTitle.textContent = `${d.date} — Day details`;
   const pSales = pct(d.sales_actual, d.sales_goal);
@@ -180,60 +177,64 @@ function openDayModal(d){
     <div class="columns">
 
       <!-- Transactions -->
-      <div class="card" id="col-txn">
-        <div class="row">
+      <div class="card" id="card-txn">
+        <div class="card-title">Transactions</div>
+        <div class="pair">
           <div>
-            <label>Goal</label>
-            <input id="txg" type="number" value="${d.txn_goal ?? ''}" readonly>
+            <div class="label">Goal</div>
+            <input id="txg" class="pill" type="number" value="${d.txn_goal ?? ''}" readonly>
           </div>
           <div>
-            <label>Actual</label>
-            <input id="txa" type="number" value="${d.txn_actual ?? ''}">
+            <div class="label">Actual</div>
+            <input id="txa" class="pill" type="number" value="${d.txn_actual ?? ''}">
           </div>
         </div>
-        <div class="foot" id="txp">% to goal: ${fmt(pct(d.txn_actual, d.txn_goal),0)}%</div>
+        <div id="txp" class="pct ${percentClass(pct(d.txn_actual,d.txn_goal))}">${fmt(pct(d.txn_actual,d.txn_goal),2)}%</div>
       </div>
 
       <!-- Sales -->
-      <div class="card" id="col-sales">
-        <div class="row">
+      <div class="card" id="card-sales">
+        <div class="card-title">Sales</div>
+        <div class="pair">
           <div>
-            <label>Goal ($)</label>
-            <input id="slg" type="number" step="0.01" value="${d.sales_goal ?? ''}" readonly>
+            <div class="label">Goal</div>
+            <input id="slg" class="pill" type="number" step="0.01" value="${d.sales_goal ?? ''}" readonly>
           </div>
           <div>
-            <label>Actual ($)</label>
-            <input id="sla" type="number" step="0.01" value="${d.sales_actual ?? ''}">
+            <div class="label">Actual</div>
+            <input id="sla" class="pill" type="number" step="0.01" value="${d.sales_actual ?? ''}">
           </div>
         </div>
-        <div class="foot" id="slp">% to goal: ${fmt(pct(d.sales_actual, d.sales_goal),0)}%</div>
+        <div id="slp" class="pct ${percentClass(pct(d.sales_actual,d.sales_goal))}">${fmt(pct(d.sales_actual,d.sales_goal),2)}%</div>
       </div>
 
       <!-- ATV -->
-      <div class="card" id="col-atv">
-        <div class="row">
+      <div class="card" id="card-atv">
+        <div class="card-title">ATV</div>
+        <div class="pair">
           <div>
-            <label>Goal ($)</label>
-            <input id="avg" type="number" step="0.01" value="${d.atv_goal ?? ''}" readonly>
+            <div class="label">Goal</div>
+            <input id="avg" class="pill" type="number" step="0.01" value="${d.atv_goal ?? ''}" readonly>
           </div>
           <div>
-            <label>Actual ($)</label>
-            <input id="ava" type="number" step="0.01" value="${atvActual ?? ''}" readonly>
+            <div class="label">Actual</div>
+            <input id="ava" class="pill" type="number" step="0.01" value="${atvActual ?? ''}" readonly>
           </div>
         </div>
-        <div class="foot" id="avp">% to goal: ${fmt(pct(atvActual, d.atv_goal),0)}%</div>
+        <div id="avp" class="pct ${percentClass(pct(atvActual,d.atv_goal))}">${fmt(pct(atvActual,d.atv_goal),2)}%</div>
       </div>
 
-      <!-- Margin (no footer) -->
-      <div class="card" id="col-margin">
-        <div class="row">
+      <!-- Margin (no % footer) -->
+      <div class="card" id="card-margin">
+        <div class="card-title">Margin</div>
+        <div class="pair">
           <div>
-            <label>Margin %</label>
-            <input id="mpc" type="number" step="0.01" value="${marginPct ?? ''}" readonly>
+            <div class="label">Margin %</div>
+            <input id="mpc" class="pill" type="number" step="0.01" value="${marginPct ?? ''}" readonly>
           </div>
           <div>
-            <label>Margin $</label>
-            <input id="m$" type="number" step="0.01" value="${d.margin_actual ?? ''}">
+            <div class="label">Margin $</div>
+            <input id="m$" class="pill" type="number" step="0.01" value="${d.margin_actual ?? ''}">
           </div>
         </div>
       </div>
@@ -241,7 +242,7 @@ function openDayModal(d){
     </div>
   `;
 
-  // Wire updates
+  // elements
   const txa = document.getElementById('txa');
   const sla = document.getElementById('sla');
   const m$  = document.getElementById('m$');
@@ -254,19 +255,24 @@ function openDayModal(d){
   const slp = document.getElementById('slp');
   const avp = document.getElementById('avp');
 
+  const setPct = (el, val)=>{ el.textContent = `${fmt(val,2)}%`; el.className = `pct ${percentClass(val)}`; };
+
   const recompute = ()=>{
     const t = Number(txa.value||0);
     const s = Number(sla.value||0);
     const mg= Number(m$.value||0);
 
+    // ATV actual & % to goal
     const atvA = (t>0) ? (s/t) : 0;
     avA.value = t>0 ? atvA.toFixed(2) : '';
-    avp.textContent = `% to goal: ${fmt(pct(atvA, avg),0)}%`;
+    setPct(avp, pct(atvA, avg));
 
+    // Margin %
     mpc.value = (s>0) ? (mg/s*100).toFixed(2) : '';
 
-    txp.textContent = `% to goal: ${fmt(pct(t, txg),0)}%`;
-    slp.textContent = `% to goal: ${fmt(pct(s, slg),0)}%`;
+    // Percent to goal rows
+    setPct(txp, pct(t, txg));
+    setPct(slp, pct(s, slg));
   };
   txa.addEventListener('input', recompute);
   sla.addEventListener('input', recompute);
