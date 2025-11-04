@@ -5,13 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sales Forecasting</title>
 
-  <!-- CSS -->
   <link rel="stylesheet" href="/styles.css" />
 
-  <!-- ✅ UMD build exposes window.supabase (NOT the ESM build) -->
+  <!-- Supabase UMD -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-  <!-- Your config first, then app. Use defer so they run after HTML is parsed. -->
   <script defer src="/config.js"></script>
   <script defer src="/app.js"></script>
 </head>
@@ -48,6 +46,40 @@
     <section id="summary" class="summary"></section>
     <section id="calendar" class="calendar"></section>
   </main>
+
+  <!-- Drill-in modal -->
+  <div id="dayModal" class="modal hidden" aria-hidden="true">
+    <div class="sheet">
+      <header>
+        <h2 id="modalTitle" style="margin:0">Day details</h2>
+        <div class="badge" id="modalBadge"></div>
+      </header>
+
+      <div class="grid" id="modalKpis"></div>
+
+      <div class="row">
+        <div>
+          <label>Transactions</label>
+          <input id="m_txn" type="number" placeholder="Transactions" />
+        </div>
+        <div>
+          <label>Net Sales ($)</label>
+          <input id="m_sales" type="number" step="0.01" placeholder="Net Sales" />
+        </div>
+        <div>
+          <label>Gross Margin ($)</label>
+          <input id="m_margin" type="number" step="0.01" placeholder="Margin dollars" />
+        </div>
+      </div>
+
+      <textarea id="m_notes" placeholder="Notes (coming soon—will save to Day Notes)"></textarea>
+
+      <div class="actions">
+        <button class="close" id="btnCloseModal">Close</button>
+        <button class="save" id="btnSaveModal">Save</button>
+      </div>
+    </div>
+  </div>
 
   <footer>
     <small>© Skye Bridge LLC — ACE Helpful Place</small>
