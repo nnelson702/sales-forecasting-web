@@ -16,7 +16,7 @@ h1{margin:0;font-size:22px;line-height:1;color:var(--ace-red)}
 button{padding:8px 12px;border:0;border-radius:10px;background:var(--ace-red);color:#fff;cursor:pointer}
 button.secondary{background:#374151}
 button:disabled{opacity:.6;cursor:not-allowed}
-.hidden{display:none}
+.hidden{display:none !important}
 .container{padding:18px;max-width:1180px;margin:0 auto}
 .controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
 .controls label{display:flex;flex-direction:column;font-size:12px;gap:6px}
@@ -59,7 +59,6 @@ button:disabled{opacity:.6;cursor:not-allowed}
 }
 .kpi b{display:block;font-size:14px;margin-top:2px}
 
-/* Inputs row, fixed order and spacing */
 .inputs{
   margin-top:auto;
   display:grid;
@@ -74,16 +73,17 @@ button:disabled{opacity:.6;cursor:not-allowed}
   font-size:14px;
 }
 
-/* Goal status colors on entire cell */
+/* Goal status outline */
 .hit{outline:2px solid var(--ok)}
 .miss{outline:2px solid var(--warn)}
 .fail{outline:2px solid var(--bad)}
 
-/* Modal */
-.modal{
+/* Modal — default is CLOSED; only visible when .open is present */
+.modal{display:none !important;}
+.modal.open{
+  display:flex !important;
   position:fixed;inset:0;background:rgba(0,0,0,.36);
-  display:flex;align-items:center;justify-content:center;
-  z-index:50;
+  align-items:center;justify-content:center;z-index:50;
 }
 .modal .sheet{
   width:min(720px,92vw);
