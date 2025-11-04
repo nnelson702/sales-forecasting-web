@@ -4,8 +4,8 @@
   --bg:#fff;
   --muted:#f4f4f5;
   --border:#e5e7eb;
-  --bg-good:#ecfdf5;   /* light green */
-  --bg-bad:#fef2f2;    /* light red */
+  --bg-good:#ecfdf5;
+  --bg-bad:#fef2f2;
   --ok:#16a34a;
   --bad:#ef4444;
   --label:#4b5563;
@@ -28,7 +28,7 @@ button:disabled{opacity:.6;cursor:not-allowed}
 
 .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
 
-/* Day cell (month view) */
+/* Day cell */
 .cell{
   border:1px solid var(--border);
   border-radius:14px;
@@ -45,7 +45,7 @@ button:disabled{opacity:.6;cursor:not-allowed}
 .cell .date{font-weight:700}
 .cell .drill{background:#f3f4f6;color:#111;border:1px solid var(--border);padding:4px 8px;border-radius:8px;font-size:12px}
 
-/* Compact no-label lines in tile */
+/* Month tile lines (no labels) */
 .lines{display:flex;flex-direction:column;gap:4px;font-variant-numeric:tabular-nums}
 .line{display:flex;justify-content:center}
 .line .mono{font-weight:700}
@@ -67,21 +67,19 @@ button:disabled{opacity:.6;cursor:not-allowed}
 .modal .sheet header{position:static;border:none;padding:0;justify-content:space-between}
 .badge{font-size:11px;padding:2px 8px;border-radius:999px;background:#f3f4f6;color:#111;border:1px solid var(--border)}
 
-/* Four cards: Transactions / Sales / ATV / Margin */
+/* Four metric cards */
 .columns{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .card{
   border:1px solid var(--border);border-radius:16px;background:#fff;
   padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;
 }
-.card-title{font-size:26px;font-weight:800;text-align:center;margin-bottom:2px}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card-title{font-size:26px;font-weight:800;text-align:center;margin:4px 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.label{font-size:14px;color:var(--label);margin-bottom:6px;text-align:center}
 .pill{
   background:#fafafa;border:1px solid var(--border);border-radius:14px;
   padding:12px 14px;font-size:20px;font-weight:700;color:#111;width:100%;
 }
-.label{font-size:14px;color:var(--label);margin-bottom:6px;text-align:center}
-
-/* footer % badge bottom-right */
 .pct{
   position:absolute;right:14px;bottom:10px;
   font-size:24px;font-weight:900;letter-spacing:.2px;
