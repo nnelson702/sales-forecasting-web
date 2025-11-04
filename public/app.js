@@ -32,7 +32,7 @@ const ui = {
 const setStatus = msg => ui.status.textContent = msg;
 const setError  = msg => (ui.status.textContent = '⚠️ ' + msg, console.error(msg));
 
-/* ---------- formatting (max 2 decimals everywhere, ints for counts) ---------- */
+/* ---------- formatting ---------- */
 const fmt0 = n => (n===null||n===undefined||Number.isNaN(n)) ? '—' : Number(n).toLocaleString(undefined,{maximumFractionDigits:0});
 const fmt2 = n => (n===null||n===undefined||Number.isNaN(n)) ? '—' : Number(n).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
 const money = n => (n===null||n===undefined||Number.isNaN(n)) ? '—' : '$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -48,6 +48,25 @@ let active = { storeId:null, month:null, versionId:null, monthRows:[], totalGoal
 function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
 function isPastDate(iso){ const t = new Date(todayISO()); const d = new Date(iso+'T00:00:00'); return d < t; }
 function isToday(iso){ return iso===todayISO(); }
+
+/* ---------- fit Sales text to one line ---------- */
+function fitSaleNode(node){
+  if (!node) return;
+  const box = node.parentElement; // the .line container
+  const max = 32;       // default css
+  const min = 18;       // don't go below
+  node.style.fontSize = max+'px';
+  // shrink until it fits
+  while (node.scrollWidth > box.clientWidth - 8 && parseFloat(node.style.fontSize) > min){
+    node.style.fontSize = (parseFloat(node.style.fontSize) - 1) + 'px';
+  }
+}
+function fitAllSales(){
+  document.querySelectorAll('.sale-big').forEach(fitSaleNode);
+}
+const resizeObs = new ResizeObserver(()=>fitAllSales());
+resizeObs.observe(document.body);
+window.addEventListener('load', fitAllSales);
 
 /* ---------- AUTH ---------- */
 async function refreshAuthUI(){
@@ -152,9 +171,15 @@ function updateCellInPlace(d){
   }
   cell.className = cls;
   cell.innerHTML = showActuals ? buildActualTile(d) : buildGoalTile(d);
+
+  // open modal
   cell.querySelector('.drill').onclick = ()=>openDayModal({...d});
+
+  // fit the sales amount on this tile
+  fitSaleNode(cell.querySelector('.sale-big'));
 }
 
+/* summary and month load remain unchanged from last version */
 function recomputeSummary(){
   let totalGoal=0, mtdActual=0, elapsedGoal=0;
   const today = todayISO();
@@ -191,10 +216,11 @@ async function loadMonth(){
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
-  // summary/totals first (used by goal share %)
   recomputeSummary();
 
   for (const d of data){ updateCellInPlace(d); }
+  // safety: run fit after full render
+  fitAllSales();
 
   setStatus('Month loaded.');
 }
@@ -229,7 +255,7 @@ async function fetchLastYearActuals(storeId, isoDate){
   return { lyTxn, lySales, lyAtv };
 }
 
-/* ---------- MODAL ---------- */
+/* ---------- MODAL (unchanged from last version, except kept your tweaks) ---------- */
 function openDayModal(d){
   const idx = active.monthRows.findIndex(r=>r.date===d.date);
   if (idx>=0) d = {...active.monthRows[idx]};
@@ -339,7 +365,6 @@ function openDayModal(d){
         gross_margin: d.margin_actual
       }]);
 
-      // Optimistic local update
       const i = active.monthRows.findIndex(x=>x.date===d.date);
       if (i>=0){
         active.monthRows[i] = { ...active.monthRows[i],
@@ -349,6 +374,7 @@ function openDayModal(d){
         };
         updateCellInPlace(active.monthRows[i]);
         recomputeSummary();
+        fitAllSales();
       }
 
       hide(ui.modal);
