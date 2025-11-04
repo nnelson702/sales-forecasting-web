@@ -1,7 +1,7 @@
 /* global window, document */
 const cfg = window.APP_CONFIG;
 
-// Keep the user signed in across refreshes, and refresh tokens automatically.
+// Keep the user signed in across refreshes.
 const supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
@@ -102,10 +102,9 @@ ui.btnLoad.onclick = ()=>{
   loadMonth();
 };
 
-// ---------- CALENDAR RENDER ----------
+// ---------- CALENDAR ----------
 function buildCellHTML(d){
   const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
-
   return `
     <div class="date-row">
       <div class="date">${d.date.slice(8)}</div>
@@ -120,25 +119,42 @@ function buildCellHTML(d){
   `;
 }
 
-function renderOrRebuildCell(d){
-  // Find existing cell by date; if not found, create one.
+function attachDrillHandler(cell, d){
+  const btn = cell.querySelector('.drill');
+  btn.onclick = ()=>openDayModal({...d}); // pass a fresh copy
+}
+
+function renderCell(d){
+  // If cell exists, replace innerHTML. If not, create it.
   let cell = document.getElementById(`cell-${d.date}`);
   const cls = `cell ${hitBgClass(d.sales_actual, d.sales_goal)}`;
-
   if (!cell){
     cell = document.createElement('div');
     cell.id = `cell-${d.date}`;
     cell.dataset.date = d.date;
     cell.className = cls;
     cell.innerHTML = buildCellHTML(d);
-    // attach click handler for Details button
-    cell.querySelector('.drill').addEventListener('click', ()=>openDayModal(d));
-    ui.calendar.appendChild(cell);
+    attachDrillHandler(cell, d);
+    return cell; // caller appends
   }else{
     cell.className = cls;
     cell.innerHTML = buildCellHTML(d);
-    cell.querySelector('.drill').addEventListener('click', ()=>openDayModal(d));
+    attachDrillHandler(cell, d);
+    return cell;
   }
+}
+
+function recomputeSummary(){
+  let mtSalesGoal=0, mtSalesAct=0;
+  for (const r of active.monthRows){
+    mtSalesGoal += r.sales_goal||0;
+    mtSalesAct  += r.sales_actual||0;
+  }
+  ui.summary.innerHTML = `
+    <b>${active.storeId}</b> — ${active.month}
+    &nbsp; | &nbsp; Sales: ${fmt(mtSalesAct,2)} / ${fmt(mtSalesGoal,2)}
+    &nbsp; | &nbsp; ${fmt(pct(mtSalesAct, mtSalesGoal),0)}% to goal
+  `;
 }
 
 async function loadMonth(){
@@ -156,27 +172,18 @@ async function loadMonth(){
   active.versionId = data[0].version_id;
   active.monthRows = data;
 
-  // pad start of month
+  // pad to first weekday
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
-  let mtSalesGoal=0, mtSalesAct=0;
-
   for (const d of data){
-    mtSalesGoal += d.sales_goal||0;
-    mtSalesAct  += d.sales_actual||0;
-    renderOrRebuildCell(d);
+    ui.calendar.appendChild(renderCell(d));
   }
-
-  ui.summary.innerHTML = `
-    <b>${active.storeId}</b> — ${active.month}
-    &nbsp; | &nbsp; Sales: ${fmt(mtSalesAct,2)} / ${fmt(mtSalesGoal,2)}
-    &nbsp; | &nbsp; ${fmt(pct(mtSalesAct, mtSalesGoal),0)}% to goal
-  `;
+  recomputeSummary();
   setStatus('Month loaded.');
 }
 
-// ---------- SAVE via Edge Function (service role) ----------
+// ---------- SAVE via Edge Function ----------
 async function upsertActuals(storeId, rows){
   const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`,{
     method:'POST',
@@ -190,18 +197,17 @@ async function upsertActuals(storeId, rows){
 }
 
 // ---------- MODAL ----------
-function openDayModal(dInitial){
-  // get the latest reference for this date from active.monthRows
-  const idx = active.monthRows.findIndex(r=>r.date===dInitial.date);
-  let d = idx>=0 ? {...active.monthRows[idx]} : {...dInitial};
+function openDayModal(d){
+  const findIdx = active.monthRows.findIndex(r=>r.date===d.date);
+  if (findIdx>=0) d = {...active.monthRows[findIdx]}; // most recent
 
-  const paintBadge = ()=>{
+  const badge = ()=>{
     const pSales = pct(d.sales_actual, d.sales_goal);
-    ui.modalBadge.textContent = (pSales >= 100) ? 'On / Above Goal' : (pSales >= 95 ? 'Near Goal' : 'Below Goal');
+    ui.modalBadge.textContent = (pSales >= 100) ? 'On / Above Goal' : (pSales >= 95 ? 'Near Goal' : 'Near Goal');
   };
 
   ui.modalTitle.textContent = `${d.date} — Day details`;
-  paintBadge();
+  badge();
 
   const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
   const marginPct = (d.sales_actual && d.margin_actual!=null) ? (d.margin_actual / d.sales_actual * 100) : null;
@@ -279,7 +285,7 @@ function openDayModal(dInitial){
     mpc.value = (s>0 && mg!=null) ? (mg/s*100).toFixed(4) : '';
     setPct(txp, pct(t, txg));
     setPct(slp, pct(s, slg));
-    paintBadge();
+    badge();
   };
   txa.addEventListener('input', recompute);
   sla.addEventListener('input', recompute);
@@ -299,16 +305,7 @@ function openDayModal(dInitial){
       }];
       await upsertActuals(active.storeId, rows);
 
-      // Verify
-      const { data:verify, error:vErr } = await supabase
-        .from('actual_daily')
-        .select('transactions,net_sales,gross_margin')
-        .eq('store_id', active.storeId).eq('date', d.date).maybeSingle();
-      if (vErr) throw new Error('Verify read failed: ' + vErr.message);
-      if (!verify) throw new Error('Save appears to have failed (no row)');
-
-      // ---- Optimistic UI update (no page reload) ----
-      // Update in-memory monthRows
+      // ---- Optimistic update: update memory, tile, and summary immediately ----
       const i = active.monthRows.findIndex(x=>x.date===d.date);
       if (i>=0){
         active.monthRows[i] = {
@@ -317,8 +314,12 @@ function openDayModal(dInitial){
           sales_actual: d.sales_actual,
           margin_actual: d.margin_actual
         };
-        // Re-render that day's tile immediately
-        renderOrRebuildCell(active.monthRows[i]);
+        const cell = renderCell(active.monthRows[i]);
+        const existing = document.getElementById(`cell-${d.date}`);
+        if (existing){
+          existing.replaceWith(cell);
+        }
+        recomputeSummary();
       }
 
       hide(ui.modal);
