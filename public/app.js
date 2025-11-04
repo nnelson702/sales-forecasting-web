@@ -39,7 +39,7 @@ const percentClass = p => (p>=100?'ok':'bad');
 const pct = (a,b)=>(!b||b===0)?0:(a/b)*100;
 const hitBgClass = (actual, goal)=>((actual||0)>=(goal||0) && (goal||0)>0)?'bg-good':'bg-bad';
 
-let active = { storeId:null, month:null, versionId:null, monthRows:[] };
+let active = { storeId:null, month:null, versionId:null, monthRows:[], totalGoal:0 };
 
 function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
 function isPastDate(iso){ const t = new Date(todayISO()); const d = new Date(iso+'T00:00:00'); return d < t; }
@@ -96,58 +96,58 @@ async function loadStores(){
 }
 ui.btnLoad.onclick = ()=>{ active.storeId = ui.storeSelect.value; active.month = ui.monthInput.value; if(!active.storeId||!active.month) return setError('Pick a store and month'); loadMonth(); };
 
-// ---------- CALENDAR ----------
-function buildCellInner(d){
-  const showActuals = isPastDate(d.date) || (isToday(d.date) && (d.sales_actual||d.txn_actual));
+// ---------- CALENDAR RENDER ----------
+function buildActualTile(d){
+  const salePct = pct(d.sales_actual, d.sales_goal);
+  const colorCls = salePct>=100 ? 'okc' : 'badc';
   const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual/d.txn_actual) : null;
 
-  if (showActuals){
-    // Actuals: bold, include $, and % to goal
-    return `
-      <div class="date-row">
-        <div class="date">${d.date.slice(8)}</div>
-        <button class="drill" type="button">Details</button>
+  return `
+    <div class="date-row">
+      <div class="date">${d.date.slice(8)}</div>
+      <button class="drill" type="button">Details</button>
+    </div>
+    <div class="lines actual">
+      <div class="line"><span class="mono sale-big ${colorCls}">${money(d.sales_actual,2)}</span></div>
+      <div class="line">
+        <span class="mono txn-big">${fmt(d.txn_actual)}</span>
+        <span class="mono atv-side ${colorCls}">${atvActual!==null?money(atvActual,2):'—'}</span>
       </div>
-      <div class="lines actual">
-        <div class="line"><span class="mono">${money(d.sales_actual,2)}</span></div>
-        <div class="line"><span class="mono">${fmt(d.txn_actual)}</span></div>
-        <div class="line"><span class="mono">${atvActual!==null?money(atvActual,2):'—'}</span></div>
-        <div class="line"><span class="mono">${fmt(pct(d.sales_actual, d.sales_goal),2)}%</span></div>
+      <div class="line center"><span class="mono pct-line ${colorCls}">${fmt(salePct,2)}%</span></div>
+    </div>
+  `;
+}
+
+function buildGoalTile(d){
+  const share = active.totalGoal>0 ? (d.sales_goal/active.totalGoal*100) : 0;
+  return `
+    <div class="date-row">
+      <div class="date">${d.date.slice(8)}</div>
+      <button class="drill" type="button">Details</button>
+    </div>
+    <div class="lines goal">
+      <div class="line"><span class="mono sale-big">${money(d.sales_goal,2)}</span></div>
+      <div class="line">
+        <span class="mono txn-big">${fmt(d.txn_goal)}</span>
+        <span class="mono atv-side">${money(d.atv_goal,2)}</span>
       </div>
-    `;
-  }else{
-    // Goals: non-bold + italic, include $ where applicable, no % and no bg color
-    return `
-      <div class="date-row">
-        <div class="date">${d.date.slice(8)}</div>
-        <button class="drill" type="button">Details</button>
-      </div>
-      <div class="lines goal">
-        <div class="line"><span class="mono">${money(d.sales_goal,2)}</span></div>
-        <div class="line"><span class="mono">${fmt(d.txn_goal)}</span></div>
-        <div class="line"><span class="mono">${money(d.atv_goal,2)}</span></div>
-      </div>
-    `;
-  }
+      <div class="line center"><span class="mono pct-line">${fmt(share,2)}%</span></div>
+    </div>
+  `;
 }
 
 function updateCellInPlace(d){
   const showActuals = isPastDate(d.date) || (isToday(d.date) && (d.sales_actual||d.txn_actual));
-  let cell = document.getElementById(`cell-${d.date}`);
-
-  // Neutral on future days, red/green only when showing actuals
   const cls = `cell ${showActuals ? hitBgClass(d.sales_actual, d.sales_goal) : ''}`.trim();
-
+  let cell = document.getElementById(`cell-${d.date}`);
   if (!cell){
     cell = document.createElement('div');
     cell.id = `cell-${d.date}`;
     cell.dataset.date = d.date;
-    cell.className = cls;
     ui.calendar.appendChild(cell);
-  }else{
-    cell.className = cls;
   }
-  cell.innerHTML = buildCellInner(d);
+  cell.className = cls;
+  cell.innerHTML = showActuals ? buildActualTile(d) : buildGoalTile(d);
   cell.querySelector('.drill').onclick = ()=>openDayModal({...d});
 }
 
@@ -160,6 +160,7 @@ function recomputeSummary(){
     mtdActual += r.sales_actual||0;
     if (r.date <= today) elapsedGoal += r.sales_goal||0;
   }
+  active.totalGoal = totalGoal;
 
   const pctToGoal = pct(mtdActual, totalGoal);
   const trending = elapsedGoal>0 ? (mtdActual/elapsedGoal)*totalGoal : mtdActual;
@@ -182,11 +183,16 @@ async function loadMonth(){
   active.versionId = data[0].version_id;
   active.monthRows = data;
 
+  // pad for first weekday
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
-  for (const d of data){ updateCellInPlace(d); }
+  // compute summary/totals (needed for goal-share %)
   recomputeSummary();
+
+  // render tiles
+  for (const d of data){ updateCellInPlace(d); }
+
   setStatus('Month loaded.');
 }
 
@@ -330,7 +336,7 @@ function openDayModal(d){
         gross_margin: d.margin_actual
       }]);
 
-      // Optimistic update + in-place refresh
+      // Optimistic local update
       const i = active.monthRows.findIndex(x=>x.date===d.date);
       if (i>=0){
         active.monthRows[i] = { ...active.monthRows[i],
