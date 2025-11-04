@@ -28,8 +28,6 @@ button:disabled{opacity:.6;cursor:not-allowed}
 .status{padding:8px 16px;background:#fff;border-bottom:1px solid var(--border);font-size:14px;color:#374151}
 
 .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
-
-/* Month tiles */
 .cell{border:1px solid var(--border);border-radius:14px;padding:10px;min-height:120px;background:#fff;display:flex;flex-direction:column;gap:8px;transition:box-shadow .15s ease, background-color .2s ease}
 .cell:hover{box-shadow:0 2px 10px rgba(0,0,0,.06)}
 .cell .date-row{display:flex;justify-content:space-between;align-items:center}
@@ -48,13 +46,13 @@ button:disabled{opacity:.6;cursor:not-allowed}
 .modal .sheet header{position:static;border:none;padding:0;display:flex;align-items:center;justify-content:space-between}
 .badge{font-size:12px;padding:4px 10px;border-radius:999px;background:#f3f4f6;color:#111;border:1px solid var(--border)}
 
-/* Metric cards – tightened to match your mock */
+/* KPI cards (match your mock) */
 .columns{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media (max-width:1100px){ .columns{grid-template-columns:repeat(2,1fr);} }
-.card{border:1px solid var(--border);border-radius:20px;background:#fff;padding:10px 12px 30px;display:flex;flex-direction:column;gap:8px;position:relative;min-height:152px}
+.card{border:1px solid var(--border);border-radius:20px;background:#fff;padding:12px 14px 30px;display:flex;flex-direction:column;gap:6px;position:relative;min-height:154px}
 .card-title{font-size:28px;font-weight:800;text-align:center;margin:0}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.label{font-size:13px;color:var(--label);margin:0 0 4px;text-align:center}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+.label{font-size:13px;color:var(--label);margin:0 0 3px;text-align:center}
 .pill{background:#fafafa;border:1px solid var(--border);border-radius:16px;padding:10px 12px;font-size:20px;font-weight:800;color:#111;width:100%}
 .pct{position:absolute;right:14px;bottom:8px;font-size:20px;font-weight:900}
 .pct.ok{color:#16a34a}
