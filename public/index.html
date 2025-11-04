@@ -2,87 +2,79 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sales Forecasting</title>
 
-  <link rel="stylesheet" href="/styles.css" />
+  <!-- Supabase -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
-  <!-- Supabase UMD -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- App config -->
+  <script>
+    window.APP_CONFIG = {
+      SUPABASE_URL: "https://bvyrxqfffaxthrjfxjue.supabase.co",
+      SUPABASE_ANON_KEY: "<?=YOUR_ANON_KEY?>"
+    };
+  </script>
 
-  <script defer src="/config.js"></script>
-  <script defer src="/app.js"></script>
+  <!-- cache-bust both files so Cloudflare won’t serve stale JS/CSS -->
+  <link rel="stylesheet" href="./styles.css?v=2025-11-03-02" />
+  <script defer src="./app.js?v=2025-11-03-02"></script>
 </head>
 <body>
   <header>
     <h1>Sales Forecasting</h1>
-    <div id="auth-area">
-      <div id="logged-out">
-        <input id="email" type="email" placeholder="Email" />
-        <input id="password" type="password" placeholder="Password" />
-        <button id="btn-signin" type="button">Sign in</button>
-      </div>
-      <div id="logged-in" class="hidden">
-        <span id="whoami"></span>
-        <button id="btn-signout" type="button">Sign out</button>
-      </div>
-    </div>
+    <div id="status" class="status">Loading…</div>
   </header>
 
-  <div id="status" class="status">Ready.</div>
+  <!-- Auth -->
+  <div id="logged-out" class="container">
+    <div id="auth-area">
+      <input id="email" type="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="Password" />
+      <button id="btn-signin">Sign in</button>
+    </div>
+  </div>
 
-  <main class="container hidden" id="app">
-    <section class="controls">
+  <div id="logged-in" class="container hidden">
+    <div>Signed in as <b id="whoami"></b></div>
+    <button id="btn-signout" class="secondary" style="margin-top:8px;">Sign out</button>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="container hidden">
+    <div class="controls">
       <label>Store
         <select id="storeSelect"></select>
       </label>
       <label>Month
         <input id="monthInput" type="month" />
       </label>
-      <button id="btn-load" type="button">Load</button>
-      <button id="btn-save" class="secondary" type="button">Save Actuals</button>
-    </section>
+      <div>
+        <button id="btn-load">Load</button>
+      </div>
+    </div>
 
-    <section id="summary" class="summary"></section>
-    <section id="calendar" class="calendar"></section>
-  </main>
+    <div id="summary" class="summary">—</div>
+    <div id="calendar" class="calendar"></div>
+  </div>
 
-  <!-- Drill-in modal -->
+  <!-- Day Modal -->
   <div id="dayModal" class="modal hidden" aria-hidden="true">
-    <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet">
       <header>
-        <h2 id="modalTitle" style="margin:0">Day details</h2>
-        <div class="badge" id="modalBadge"></div>
+        <h2 id="modalTitle" style="margin:0"></h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="modalBadge" class="badge">—</span>
+        </div>
       </header>
 
-      <div class="grid" id="modalKpis"></div>
-
-      <div class="row">
-        <div>
-          <label>Transactions</label>
-          <input id="m_txn" type="number" placeholder="Transactions" />
-        </div>
-        <div>
-          <label>Net Sales ($)</label>
-          <input id="m_sales" type="number" step="0.01" placeholder="Net Sales" />
-        </div>
-        <div>
-          <label>Gross Margin ($)</label>
-          <input id="m_margin" type="number" step="0.01" placeholder="Margin dollars" />
-        </div>
-      </div>
-
-      <textarea id="m_notes" placeholder="Notes (coming soon—will save to Day Notes)"></textarea>
+      <div id="modalKpis"></div>
 
       <div class="actions">
-        <button class="close" id="btnCloseModal" type="button">Close</button>
-        <button class="save" id="btnSaveModal" type="button">Save</button>
+        <button id="btnCloseModal" class="close">Close</button>
+        <button id="btnSaveModal" class="save">Save</button>
       </div>
     </div>
   </div>
-
-  <footer>
-    <small>© Skye Bridge LLC — ACE Helpful Place</small>
-  </footer>
 </body>
 </html>
