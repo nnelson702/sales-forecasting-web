@@ -1,16 +1,12 @@
 /* global window, document */
 const cfg = window.APP_CONFIG;
 
-// Disable persistent login while we debug (no localStorage carryover)
+// No persistent session while we stabilize auth & UI
 const supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,           // <-- forces fresh session per tab load
-    storage: window.sessionStorage,  // memory-like
-    autoRefreshToken: false
-  }
+  auth: { persistSession: false, storage: window.sessionStorage, autoRefreshToken: false }
 });
 
-// helpers
+// ---------- helpers ----------
 const $ = id => document.getElementById(id);
 const ui = {
   status: $('status'),
@@ -40,21 +36,21 @@ const ui = {
   btnCloseModal: $('btnCloseModal'),
   btnSaveModal: $('btnSaveModal'),
 };
-
-function setStatus(msg){ ui.status.textContent = msg; }
-function setError(msg){ ui.status.textContent = '⚠️ ' + msg; console.error(msg); }
-function fmt(n, d=0){ if(n===null||n===undefined||Number.isNaN(n)) return '—'; return Number(n).toLocaleString(undefined,{minimumFractionDigits:d, maximumFractionDigits:d}); }
-function pct(a,b){ if(!b) return 0; return (a/b)*100; }
-function addHidden(el){ el.classList.add('hidden'); el.setAttribute('aria-hidden','true'); }
-function removeHidden(el){ el.classList.remove('hidden'); el.setAttribute('aria-hidden','false'); }
+const setStatus = msg => (ui.status.textContent = msg);
+const setError  = msg => (ui.status.textContent = '⚠️ ' + msg, console.error(msg));
+const fmt = (n,d=0)=> (n===null||n===undefined||Number.isNaN(n)) ? '—' :
+  Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct = (a,b)=> !b ? 0 : (a/b)*100;
+const hide = el => { el.classList.remove('open'); el.classList.add('hidden'); el.setAttribute('aria-hidden','true'); };
+const show = el => { el.classList.remove('hidden'); el.classList.add('open'); el.setAttribute('aria-hidden','false'); };
 
 // state
 let session=null;
 let edited={};
 let active={ storeId:null, month:null, versionId:null, monthRows:[] };
-let currentDay = null;
+let currentDay=null;
 
-// goal coloring
+// ---------- goal coloring ----------
 function goalClass(actual, goal){
   if (goal <= 0) return '';
   if ((actual||0) >= goal) return 'hit';
@@ -62,35 +58,33 @@ function goalClass(actual, goal){
   return 'fail';
 }
 
-// ===== AUTH =====
+// ---------- AUTH ----------
 async function refreshAuthUI(){
-  // Always start logged-out view until a successful sign-in in this tab
+  // Force modal closed every time we check auth
+  hide(ui.modal); currentDay = null;
+
   const { data, error } = await supabase.auth.getSession();
   if (error){ setError('Auth session error: ' + error.message); return; }
   session = data.session;
 
   if (session?.user){
-    addHidden(ui.loggedOut);
-    removeHidden(ui.loggedIn);
-    removeHidden(ui.app);
+    ui.loggedOut.classList.add('hidden');
+    ui.loggedIn.classList.remove('hidden');
+    ui.app.classList.remove('hidden');
     ui.whoami.textContent = session.user.email;
     setStatus('Signed in as ' + session.user.email);
     await loadStores();
   }else{
-    removeHidden(ui.loggedOut);
-    addHidden(ui.loggedIn);
-    addHidden(ui.app);
+    ui.loggedOut.classList.remove('hidden');
+    ui.loggedIn.classList.add('hidden');
+    ui.app.classList.add('hidden');
     setStatus('Not signed in.');
   }
-
-  // Safety: ensure modal is hidden on page (no auto-open possible)
-  addHidden(ui.modal);
-  currentDay = null;
 }
 
 ui.btnSignIn.onclick = async ()=>{
   const email = ui.email.value.trim(), password = ui.password.value;
-  if(!email || !password) return setError('Enter email and password.');
+  if (!email || !password) return setError('Enter email and password.');
   ui.btnSignIn.disabled = true; setStatus('Signing in…');
   try{
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -105,7 +99,7 @@ ui.btnSignOut.onclick = async ()=>{
   await refreshAuthUI();
 };
 
-// ===== STORES =====
+// ---------- STORES ----------
 async function loadStores(){
   setStatus('Loading stores…');
   const { data, error } = await supabase.from('v_user_stores').select('*');
@@ -123,14 +117,15 @@ async function loadStores(){
   }
   setStatus('Stores loaded.');
 }
+
 ui.btnLoad.onclick = ()=>{
   active.storeId = ui.storeSelect.value;
-  active.month = ui.monthInput.value;
+  active.month   = ui.monthInput.value;
   if (!active.storeId || !active.month) return setError('Pick a store and month');
   loadMonth();
 };
 
-// ===== MONTH VIEW =====
+// ---------- MONTH VIEW ----------
 async function loadMonth(){
   edited={}; ui.calendar.innerHTML=''; ui.summary.textContent='Loading…'; setStatus(`Loading ${active.storeId} — ${active.month}`);
   const { data, error } = await supabase.from('v_calendar_month')
@@ -144,7 +139,7 @@ async function loadMonth(){
   active.versionId = data[0].version_id;
   active.monthRows = data;
 
-  // pad to weekday
+  // pad leading blanks
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
@@ -152,7 +147,7 @@ async function loadMonth(){
 
   for (const d of data){
     mtTxnGoal += d.txn_goal||0; mtSalesGoal += d.sales_goal||0;
-    mtTxnAct += d.txn_actual||0; mtSalesAct += d.sales_actual||0;
+    mtTxnAct  += d.txn_actual||0; mtSalesAct  += d.sales_actual||0;
 
     const cell = document.createElement('div');
     cell.className = 'cell ' + goalClass(d.sales_actual||0, d.sales_goal||0);
@@ -161,7 +156,7 @@ async function loadMonth(){
     const top = document.createElement('div');
     top.className='date-row';
     const btn = document.createElement('button');
-    btn.className = 'drill'; btn.type = 'button'; btn.textContent = 'Details';
+    btn.className='drill'; btn.type='button'; btn.textContent='Details';
     btn.addEventListener('click', ()=>openDayModal(d));
     top.innerHTML = `<div class="date">${d.date.slice(8)}</div>`;
     top.appendChild(btn);
@@ -178,14 +173,14 @@ async function loadMonth(){
 
     const inputs = document.createElement('div'); inputs.className='inputs';
     const iTxn = document.createElement('input'); iTxn.type='number'; iTxn.placeholder='Txn'; iTxn.value = d.txn_actual ?? '';
-    const iSales = document.createElement('input'); iSales.type='number'; iSales.step='0.01'; iSales.placeholder='Sales'; iSales.value = d.sales_actual ?? '';
+    const iSales= document.createElement('input'); iSales.type='number'; iSales.step='0.01'; iSales.placeholder='Sales'; iSales.value = d.sales_actual ?? '';
     inputs.appendChild(iTxn); inputs.appendChild(iSales);
     cell.appendChild(inputs);
 
     const markEdited = ()=>{
       edited[d.date] = {
         transactions: iTxn.value===''?null:Number(iTxn.value),
-        net_sales: iSales.value===''?null:Number(iSales.value),
+        net_sales:    iSales.value===''?null:Number(iSales.value),
         gross_margin: (edited[d.date]?.gross_margin ?? null)
       };
     };
@@ -204,12 +199,9 @@ async function loadMonth(){
   setStatus('Month loaded.');
 }
 
-// ===== MODAL (open/close/save) =====
+// ---------- MODAL ----------
 function openDayModal(d){
-  // force-close any previous
-  addHidden(ui.modal);
-
-  // fill content
+  currentDay = d;
   ui.modalTitle.textContent = `${d.date} — Details`;
   ui.modalBadge.textContent = (d.sales_actual||0)>= (d.sales_goal||0) ? 'On / Above Goal' :
                               (d.sales_actual||0)>= 0.95*(d.sales_goal||0) ? 'Near Goal' : 'Below Goal';
@@ -222,53 +214,48 @@ function openDayModal(d){
     <div class="kpi">Sales Actual<b>${fmt(d.sales_actual,2)}</b></div>
     <div class="kpi">To Goal<b>${fmt((d.sales_goal||0)-(d.sales_actual||0),2)}</b></div>
   `;
-
   ui.m_txn.value   = d.txn_actual ?? '';
   ui.m_sales.value = d.sales_actual ?? '';
   ui.m_margin.value= d.margin_actual ?? '';
   ui.m_notes.value = '';
 
-  // attach one-shot save handler
+  // reset handlers (no stacking)
   ui.btnSaveModal.onclick = async ()=>{
-    ui.btnSaveModal.onclick = null; // prevent stacking
-    await saveDay(d.date);
+    ui.btnSaveModal.disabled = true;
+    try{
+      await saveDay(d.date);
+      closeModal();
+      await loadMonth();
+      setStatus('Saved day.');
+    }catch(e){ setError(e.message); }
+    finally { ui.btnSaveModal.disabled = false; }
   };
 
-  removeHidden(ui.modal);
+  show(ui.modal);
 }
-function closeModal(){
-  addHidden(ui.modal);
-  ui.btnSaveModal.onclick = null;
-}
+function closeModal(){ hide(ui.modal); currentDay=null; ui.btnSaveModal.onclick=null; }
 async function saveDay(date){
   const row = {
     date,
     transactions: ui.m_txn.value===''?null:Number(ui.m_txn.value),
-    net_sales:   ui.m_sales.value===''?null:Number(ui.m_sales.value),
-    gross_margin:ui.m_margin.value===''?null:Number(ui.m_margin.value)
+    net_sales:    ui.m_sales.value===''?null:Number(ui.m_sales.value),
+    gross_margin: ui.m_margin.value===''?null:Number(ui.m_margin.value)
   };
-  ui.btnSaveModal.disabled = true; setStatus('Saving day…');
-  try{
-    const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${cfg.SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ storeId: active.storeId, rows:[row] })
-    });
-    const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error||'Save failed');
-    closeModal();
-    await loadMonth();
-    setStatus('Saved day.');
-  }catch(e){ setError(e.message); }
-  finally{ ui.btnSaveModal.disabled = false; }
+  const resp = await fetch(`${cfg.SUPABASE_URL}/functions/v1/upsert-actuals`,{
+    method:'POST',
+    headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${cfg.SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ storeId: active.storeId, rows:[row] })
+  });
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || 'Save failed');
 }
 
-// close interactions
+// Close interactions always active
 ui.btnCloseModal.addEventListener('click', closeModal);
 ui.modal.addEventListener('click', (e)=>{ if(e.target===ui.modal) closeModal(); });
-window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ui.modal.getAttribute('aria-hidden')!=='true') closeModal(); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && !ui.modal.classList.contains('hidden')) closeModal(); });
 
-// ===== SAVE MANY =====
+// ---------- SAVE MANY ----------
 ui.btnSave.onclick = async ()=>{
   const rows = Object.entries(edited).map(([date,vals])=>({ date, ...vals }));
   if (rows.length===0) return setStatus('No changes to save.');
@@ -288,10 +275,10 @@ ui.btnSave.onclick = async ()=>{
   finally{ ui.btnSave.disabled=false; }
 };
 
-// init: always hide modal on boot
+// ---------- boot ----------
 (async ()=>{
-  addHidden(ui.modal);
+  // Hard-close modal on first paint
+  hide(ui.modal);
   setStatus('Initializing…');
   await refreshAuthUI();
-  // with persistSession:false we don’t auto-login; user must click Sign in
 })();
