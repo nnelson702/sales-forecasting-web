@@ -20,11 +20,11 @@
       <div id="logged-out">
         <input id="email" type="email" placeholder="Email" />
         <input id="password" type="password" placeholder="Password" />
-        <button id="btn-signin">Sign in</button>
+        <button id="btn-signin" type="button">Sign in</button>
       </div>
       <div id="logged-in" class="hidden">
         <span id="whoami"></span>
-        <button id="btn-signout">Sign out</button>
+        <button id="btn-signout" type="button">Sign out</button>
       </div>
     </div>
   </header>
@@ -39,8 +39,8 @@
       <label>Month
         <input id="monthInput" type="month" />
       </label>
-      <button id="btn-load">Load</button>
-      <button id="btn-save" class="secondary">Save Actuals</button>
+      <button id="btn-load" type="button">Load</button>
+      <button id="btn-save" class="secondary" type="button">Save Actuals</button>
     </section>
 
     <section id="summary" class="summary"></section>
@@ -49,7 +49,7 @@
 
   <!-- Drill-in modal -->
   <div id="dayModal" class="modal hidden" aria-hidden="true">
-    <div class="sheet">
+    <div class="sheet" role="dialog" aria-modal="true">
       <header>
         <h2 id="modalTitle" style="margin:0">Day details</h2>
         <div class="badge" id="modalBadge"></div>
@@ -75,8 +75,8 @@
       <textarea id="m_notes" placeholder="Notes (coming soon—will save to Day Notes)"></textarea>
 
       <div class="actions">
-        <button class="close" id="btnCloseModal">Close</button>
-        <button class="save" id="btnSaveModal">Save</button>
+        <button class="close" id="btnCloseModal" type="button">Close</button>
+        <button class="save" id="btnSaveModal" type="button">Save</button>
       </div>
     </div>
   </div>
