@@ -118,7 +118,6 @@ async function loadMonth(){
   active.versionId = data[0].version_id;
   active.monthRows = data;
 
-  // pad leading blanks
   const firstDow = new Date(data[0].date+'T00:00:00').getDay();
   for (let i=0;i<firstDow;i++){ const pad=document.createElement('div'); pad.className='cell'; ui.calendar.appendChild(pad); }
 
@@ -141,7 +140,6 @@ async function loadMonth(){
     top.appendChild(btn);
     cell.appendChild(top);
 
-    // Calendar lines (no labels)
     const atvActual = (d.txn_actual && d.sales_actual) ? (d.sales_actual / d.txn_actual) : null;
     const lines = document.createElement('div');
     lines.className='lines';
@@ -178,10 +176,8 @@ async function tryEdgeFunctionUpsert(storeId, rows){
 }
 
 async function directTableUpsert(storeId, rows){
-  // rows: [{date, transactions, net_sales, gross_margin}]
   const shaped = rows.map(r=>({
-    store_id: storeId,
-    date: r.date,
+    store_id: storeId, date: r.date,
     transactions: r.transactions ?? null,
     net_sales: r.net_sales ?? null,
     gross_margin: r.gross_margin ?? null
@@ -208,14 +204,8 @@ function openDayModal(d){
       <div class="card" id="card-txn">
         <div class="card-title">Transactions</div>
         <div class="pair">
-          <div>
-            <div class="label">Goal</div>
-            <input id="txg" class="pill" type="number" value="${d.txn_goal ?? ''}" readonly>
-          </div>
-          <div>
-            <div class="label">Actual</div>
-            <input id="txa" class="pill" type="number" value="${d.txn_actual ?? ''}">
-          </div>
+          <div><div class="label">Goal</div><input id="txg" class="pill" type="number" value="${d.txn_goal ?? ''}" readonly></div>
+          <div><div class="label">Actual</div><input id="txa" class="pill" type="number" value="${d.txn_actual ?? ''}"></div>
         </div>
         <div id="txp" class="pct ${percentClass(pct(d.txn_actual,d.txn_goal))}">${fmt(pct(d.txn_actual,d.txn_goal),2)}%</div>
       </div>
@@ -223,14 +213,8 @@ function openDayModal(d){
       <div class="card" id="card-sales">
         <div class="card-title">Sales</div>
         <div class="pair">
-          <div>
-            <div class="label">Goal ($)</div>
-            <input id="slg" class="pill" type="number" step="0.01" value="${d.sales_goal ?? ''}" readonly>
-          </div>
-          <div>
-            <div class="label">Actual ($)</div>
-            <input id="sla" class="pill" type="number" step="0.01" value="${d.sales_actual ?? ''}">
-          </div>
+          <div><div class="label">Goal ($)</div><input id="slg" class="pill" type="number" step="0.01" value="${d.sales_goal ?? ''}" readonly></div>
+          <div><div class="label">Actual ($)</div><input id="sla" class="pill" type="number" step="0.01" value="${d.sales_actual ?? ''}"></div>
         </div>
         <div id="slp" class="pct ${percentClass(pct(d.sales_actual,d.sales_goal))}">${fmt(pct(d.sales_actual,d.sales_goal),2)}%</div>
       </div>
@@ -238,14 +222,8 @@ function openDayModal(d){
       <div class="card" id="card-atv">
         <div class="card-title">ATV</div>
         <div class="pair">
-          <div>
-            <div class="label">Goal ($)</div>
-            <input id="avg" class="pill" type="number" step="0.01" value="${d.atv_goal ?? ''}" readonly>
-          </div>
-          <div>
-            <div class="label">Actual ($)</div>
-            <input id="ava" class="pill" type="number" step="0.01" value="${atvActual ?? ''}" readonly>
-          </div>
+          <div><div class="label">Goal ($)</div><input id="avg" class="pill" type="number" step="0.01" value="${d.atv_goal ?? ''}" readonly></div>
+          <div><div class="label">Actual ($)</div><input id="ava" class="pill" type="number" step="0.01" value="${atvActual ?? ''}" readonly></div>
         </div>
         <div id="avp" class="pct ${percentClass(pct(atvActual,d.atv_goal))}">${fmt(pct(atvActual,d.atv_goal),2)}%</div>
       </div>
@@ -253,14 +231,8 @@ function openDayModal(d){
       <div class="card" id="card-margin">
         <div class="card-title">Margin</div>
         <div class="pair">
-          <div>
-            <div class="label">Margin %</div>
-            <input id="mpc" class="pill" type="number" step="0.01" value="${marginPct ?? ''}" readonly>
-          </div>
-          <div>
-            <div class="label">Margin $</div>
-            <input id="m$" class="pill" type="number" step="0.01" value="${d.margin_actual ?? ''}">
-          </div>
+          <div><div class="label">Margin %</div><input id="mpc" class="pill" type="number" step="0.01" value="${marginPct ?? ''}" readonly></div>
+          <div><div class="label">Margin $</div><input id="m$" class="pill" type="number" step="0.01" value="${d.margin_actual ?? ''}"></div>
         </div>
       </div>
 
@@ -311,13 +283,21 @@ function openDayModal(d){
         gross_margin:m$.value===''?null:Number(m$.value)
       }];
 
-      // try edge function first; if it fails, fall back to direct upsert
+      // Try edge function first; fallback to direct upsert
       try{
         await tryEdgeFunctionUpsert(active.storeId, rows);
       }catch(e1){
         console.warn('Edge function upsert failed, falling back:', e1.message);
         await directTableUpsert(active.storeId, rows);
       }
+
+      // Verify write & refresh UI
+      const { data:verify, error:vErr } = await supabase
+        .from('actual_daily')
+        .select('transactions,net_sales,gross_margin')
+        .eq('store_id', active.storeId).eq('date', d.date).maybeSingle();
+      if (vErr) throw new Error('Verify read failed: ' + vErr.message);
+      if (!verify) throw new Error('Save appears to have failed (no row found)');
 
       closeModal();
       await loadMonth();
