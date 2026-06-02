@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import RequireAuth from "@/components/RequireAuth";
 import { fetchStores, type StoreRow } from "../../shared/db/stores";
 import { fetchMonthlyGoal, type MonthlyGoalRow } from "../../shared/db/goals";
 import { fetchDailyGoalsForMonthPublished, type DailyGoalRow } from "../../shared/db/daily_goals";
@@ -41,6 +42,14 @@ function addMonths(d: Date, months: number) {
 }
 
 export default function GoalsPage() {
+  return (
+    <RequireAuth>
+      <GoalsPageInner />
+    </RequireAuth>
+  );
+}
+
+function GoalsPageInner() {
   const todayIso = useMemo(() => iso(new Date()), []);
 
   const [stores, setStores] = useState<StoreRow[]>([]);

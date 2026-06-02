@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/shared/supabase/client";
+import RequireAdmin from "@/components/RequireAdmin";
 import { fetchStores, StoreRow } from "@/shared/db/stores";
 import { fetchMonthlyGoal, upsertMonthlyGoal } from "@/shared/db/goals";
 import {
@@ -320,6 +321,14 @@ function allocateTxnsAndSales(
  * Page
  * --------------------------*/
 export default function AdminGoalsPage() {
+  return (
+    <RequireAdmin>
+      <AdminGoalsPageInner />
+    </RequireAdmin>
+  );
+}
+
+function AdminGoalsPageInner() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -363,11 +372,6 @@ export default function AdminGoalsPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        window.location.href = "/auth/login";
-        return;
-      }
       const rows = await fetchStores();
       setStores(rows);
       setStoreId(rows[0]?.store_id || "");
@@ -396,12 +400,33 @@ export default function AdminGoalsPage() {
 
   const saveMonthly = async () => {
     setMsg(null);
+
+    // Validate inputs before saving
+    if (!storeId) {
+      setMsg("Select a store before saving.");
+      return;
+    }
+    const salesNum = Number(netSales);
+    if (!Number.isFinite(salesNum) || salesNum <= 0) {
+      setMsg("Net sales goal must be greater than 0.");
+      return;
+    }
+    const txnsNum = Number(txns);
+    if (!Number.isFinite(txnsNum) || txnsNum <= 0) {
+      setMsg("Transactions goal must be greater than 0.");
+      return;
+    }
+    if (!Number.isInteger(txnsNum)) {
+      setMsg("Transactions goal must be a whole number (no decimals).");
+      return;
+    }
+
     try {
       await upsertMonthlyGoal({
         store_id: storeId,
         month_start: monthStart,
-        net_sales_goal: Number(netSales),
-        transactions_goal: Number(txns),
+        net_sales_goal: salesNum,
+        transactions_goal: txnsNum,
         is_published: publishedMonthly,
       });
       setMsg("Monthly goal saved.");
@@ -637,16 +662,22 @@ export default function AdminGoalsPage() {
     setMsg(null);
     setBusy(true);
     try {
+      // Fix: upsert directly as is_published: true so there is no window where
+      // store-facing users see zero published goals between the upsert and the
+      // bulk-publish update. Previously this saved as is_published: false then
+      // flipped — that race is now eliminated.
       const payload = draftCells.map((c) => ({
         store_id: storeId,
         goal_date: c.goal_date,
         transactions_goal: Math.max(0, Math.round(Number(c.transactions_goal || 0))),
         net_sales_goal: Math.max(0, Math.round(Number(c.net_sales_goal || 0))),
         is_locked: false,
-        is_published: false,
+        is_published: true,
       }));
       await upsertDailyGoals(payload);
 
+      // Belt-and-suspenders: also publish any rows in this month that are not
+      // in the current draft (e.g. rows saved by a prior session).
       await setDailyGoalsPublishedForMonth(storeId, monthStart, true);
 
       setMsg("Published. Store users will now see these daily goals.");
