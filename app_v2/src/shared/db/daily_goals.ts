@@ -72,14 +72,21 @@ export async function fetchDailyGoalsForMonthPublished(storeId: string, monthSta
 }
 
 export async function upsertDailyGoals(rows: DailyGoalUpsertRow[]) {
-  const payload = rows.map((r) => ({
-    store_id: r.store_id,
-    goal_date: r.goal_date,
-    net_sales_goal: r.net_sales_goal,
-    transactions_goal: r.transactions_goal,
-    is_locked: r.is_locked ?? false,
-    is_published: r.is_published ?? false,
-  }));
+  const payload = rows.map((r) => {
+    const row: Record<string, string | number | boolean> = {
+      store_id: r.store_id,
+      goal_date: r.goal_date,
+      net_sales_goal: r.net_sales_goal,
+      transactions_goal: r.transactions_goal,
+      is_locked: r.is_locked ?? false,
+    };
+
+    if (r.is_published === true) {
+      row.is_published = true;
+    }
+
+    return row;
+  });
 
   const { error } = await supabase.from("daily_goals").upsert(payload, { onConflict: "store_id,goal_date" });
   if (error) throw error;
