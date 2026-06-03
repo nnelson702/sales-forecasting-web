@@ -1,3 +1,13 @@
+/**
+ * @deprecated This file is NOT used anywhere in the codebase.
+ *
+ * Use `shared/db/daily_goals.ts` instead. That file has the correct
+ * DailyGoalRow type (includes is_locked and is_published) and the
+ * full set of helper functions used by the app.
+ *
+ * Do NOT import from this file. It will be deleted in a future cleanup PR.
+ */
+
 import { supabase } from "@/shared/supabase/client";
 
 export type DailyGoalRow = {

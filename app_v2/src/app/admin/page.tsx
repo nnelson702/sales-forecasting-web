@@ -1,6 +1,16 @@
 ﻿"use client";
 
+import RequireAdmin from "@/components/RequireAdmin";
+
 export default function AdminPanelPage() {
+  return (
+    <RequireAdmin>
+      <AdminPanelPageInner />
+    </RequireAdmin>
+  );
+}
+
+function AdminPanelPageInner() {
   const card: React.CSSProperties = {
     border: "1px solid #e5e7eb",
     borderRadius: 14,
