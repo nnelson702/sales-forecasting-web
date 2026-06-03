@@ -33,6 +33,24 @@ function addMonths(dateIsoYYYYMMDD: string, months: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function validateMonthlyGoal(row: MonthlyGoalRow) {
+  if (!row.store_id) {
+    throw new Error("Store is required before saving a monthly goal.");
+  }
+
+  if (!row.month_start || row.month_start.length !== 10 || !row.month_start.endsWith("-01")) {
+    throw new Error("Month must be saved as the first day of the month.");
+  }
+
+  if (!Number.isFinite(row.net_sales_goal) || row.net_sales_goal <= 0) {
+    throw new Error("Net sales goal must be greater than 0.");
+  }
+
+  if (!Number.isInteger(row.transactions_goal) || row.transactions_goal <= 0) {
+    throw new Error("Transactions goal must be a positive whole number.");
+  }
+}
+
 export async function fetchMonthlyGoal(storeId: string, monthStartIso: string): Promise<MonthlyGoalRow | null> {
   const { data, error } = await supabase
     .from("monthly_goals")
@@ -56,6 +74,8 @@ export async function fetchMonthlyGoal(storeId: string, monthStartIso: string): 
 }
 
 export async function upsertMonthlyGoal(row: MonthlyGoalRow): Promise<void> {
+  validateMonthlyGoal(row);
+
   const payload = {
     store_id: row.store_id,
     month_start: row.month_start,
