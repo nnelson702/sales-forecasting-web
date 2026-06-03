@@ -11,6 +11,15 @@ export type DailyGoalRow = {
   updated_at?: string;
 };
 
+export type DailyGoalUpsertRow = {
+  store_id: string;
+  goal_date: string;
+  net_sales_goal: number;
+  transactions_goal: number;
+  is_locked?: boolean;
+  is_published?: boolean;
+};
+
 function iso(d: Date) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -25,7 +34,6 @@ function parseMonthStart(monthStartIso: string) {
 }
 
 function monthBounds(monthStartIso: string) {
-  // Always use real month boundaries (NO YYYY-MM-32)
   const startDt = parseMonthStart(monthStartIso);
   const start = iso(startDt);
   const end = iso(new Date(startDt.getFullYear(), startDt.getMonth() + 1, 1));
@@ -33,7 +41,6 @@ function monthBounds(monthStartIso: string) {
 }
 
 export async function fetchDailyGoalsForMonthAdmin(storeId: string, monthStartIso: string) {
-  // Admin can see draft + published
   const { start, end } = monthBounds(monthStartIso);
 
   const { data, error } = await supabase
@@ -49,7 +56,6 @@ export async function fetchDailyGoalsForMonthAdmin(storeId: string, monthStartIs
 }
 
 export async function fetchDailyGoalsForMonthPublished(storeId: string, monthStartIso: string) {
-  // Store users should only see published
   const { start, end } = monthBounds(monthStartIso);
 
   const { data, error } = await supabase
@@ -65,16 +71,7 @@ export async function fetchDailyGoalsForMonthPublished(storeId: string, monthSta
   return (data ?? []) as DailyGoalRow[];
 }
 
-export async function upsertDailyGoals(
-  rows: Array<{
-    store_id: string;
-    goal_date: string;
-    net_sales_goal: number;
-    transactions_goal: number;
-    is_locked?: boolean;
-    is_published?: boolean;
-  }>
-) {
+export async function upsertDailyGoals(rows: DailyGoalUpsertRow[]) {
   const payload = rows.map((r) => ({
     store_id: r.store_id,
     goal_date: r.goal_date,
@@ -86,6 +83,10 @@ export async function upsertDailyGoals(
 
   const { error } = await supabase.from("daily_goals").upsert(payload, { onConflict: "store_id,goal_date" });
   if (error) throw error;
+}
+
+export async function upsertDailyGoalsAsPublished(rows: DailyGoalUpsertRow[]) {
+  return upsertDailyGoals(rows.map((row) => ({ ...row, is_published: true })));
 }
 
 export async function setDailyGoalsPublishedForMonth(storeId: string, monthStartIso: string, published: boolean) {
