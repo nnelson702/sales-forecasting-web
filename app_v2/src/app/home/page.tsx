@@ -49,7 +49,7 @@ export default function HomePage() {
       await createPost({
         title: title.trim() || undefined,
         body: body.trim(),
-        pinned,
+        is_pinned: pinned,
       });
       setTitle("");
       setBody("");
@@ -132,7 +132,7 @@ export default function HomePage() {
                 <div key={p.post_id} style={{ padding: 14, border: "1px solid #eee", borderRadius: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ fontWeight: 800 }}>{p.title || "(No title)"}</div>
-                    {p.pinned && <div style={{ fontSize: 12, opacity: 0.8 }}>Pinned</div>}
+                    {p.is_pinned && <div style={{ fontSize: 12, opacity: 0.8 }}>Pinned</div>}
                   </div>
                   <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{p.body}</div>
                   <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
