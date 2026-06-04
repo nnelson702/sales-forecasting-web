@@ -47,7 +47,7 @@ export default function HomePage() {
     }
     try {
       await createPost({
-        title: title.trim() || null,
+        title: title.trim() || undefined,
         body: body.trim(),
         pinned,
       });
