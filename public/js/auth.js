@@ -1,33 +1,59 @@
 import { supabase } from "./supabaseClient.js";
 import { qs } from "./utils.js";
 
+function getLoginForm() {
+  return qs("#authForm") || qs("#login-form");
+}
+
+function getEmailInput() {
+  return qs("#email") || qs("#login-email");
+}
+
+function getPasswordInput() {
+  return qs("#password") || qs("#login-password");
+}
+
+function setSignedInView(session) {
+  const auth = qs("#auth");
+  const app = qs("#app");
+  const whoami = qs("#whoami");
+
+  if (auth) auth.classList.toggle("hidden", Boolean(session));
+  if (app) app.classList.toggle("hidden", !session);
+  if (whoami && session?.user?.email) whoami.textContent = session.user.email;
+}
+
 export async function bootAuthUI() {
-  const form = qs("#login-form");
+  const existing = await getSession();
+  setSignedInView(existing);
+
+  const form = getLoginForm();
   if (!form) return;
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    const email = qs("#login-email").value.trim();
-    const password = qs("#login-password").value;
+    const email = getEmailInput()?.value?.trim();
+    const password = getPasswordInput()?.value;
 
     if (!email || !password) {
       alert("Email and password required");
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    window.location.reload();
+    setSignedInView(data.session);
   });
+}
+
+export async function initAuth() {
+  return bootAuthUI();
 }
 
 export async function getSession() {
@@ -37,5 +63,5 @@ export async function getSession() {
 
 export async function signOut() {
   await supabase.auth.signOut();
-  window.location.reload();
+  setSignedInView(null);
 }
