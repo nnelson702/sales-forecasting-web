@@ -1,6 +1,6 @@
 import { bootAuthUI as initAuth } from "./js/auth.js";
 import { initRouter } from "./js/router.js";
-import { mountAdminPanel } from "./js/pages/adminPanel.js";
+import { renderAdminPanel as mountAdminPanel } from "./js/pages/adminPanel.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   initRouter();
