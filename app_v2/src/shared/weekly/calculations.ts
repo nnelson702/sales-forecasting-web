@@ -122,6 +122,13 @@ export function safeDivide(numerator: number, denominator: number): number {
   return numerator / denominator;
 }
 
+export function percentChange(current: number, comparison: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(comparison) || comparison === 0) {
+    return 0;
+  }
+  return current / comparison - 1;
+}
+
 export function average(values: number[]): number {
   const finiteValues = values.filter(Number.isFinite);
   if (!finiteValues.length) return 0;
@@ -161,21 +168,21 @@ export function calculateWeeklyPerformance(
     netSalesResultPercent: safeDivide(inputs.netSalesActual, inputs.netSalesGoal),
     netSalesVarianceDollars: inputs.netSalesActual - inputs.netSalesGoal,
     netSalesDailyAverage: inputs.netSalesActual / 7,
-    netSalesYearOverYearPercent: safeDivide(inputs.netSalesActual, inputs.lastYearNetSales) - 1,
+    netSalesYearOverYearPercent: percentChange(inputs.netSalesActual, inputs.lastYearNetSales),
     netSalesYearOverYearDollars: inputs.netSalesActual - inputs.lastYearNetSales,
     gpDollarsGoal,
     gpPercentActual,
     gpPercentVariancePoints: gpPercentActual - inputs.gpPercentGoal,
     gpDollarsVariance: inputs.gpDollarsActual - gpDollarsGoal,
     lastYearGpPercent,
-    gpYearOverYearPercent: safeDivide(inputs.gpDollarsActual, inputs.lastYearGpDollars) - 1,
+    gpYearOverYearPercent: percentChange(inputs.gpDollarsActual, inputs.lastYearGpDollars),
     gpYearOverYearDollars: inputs.gpDollarsActual - inputs.lastYearGpDollars,
     transactionsDailyAverage: inputs.transactionsActual / 7,
     atvGoal,
     atvActual,
     atvDeltaDollars: atvActual - atvGoal,
     lastYearAtv,
-    atvYearOverYearPercent: safeDivide(atvActual, lastYearAtv) - 1,
+    atvYearOverYearPercent: percentChange(atvActual, lastYearAtv),
     atvYearOverYearDollars: atvActual - lastYearAtv,
     pipDailyAverage: inputs.weeklyPipCost / 7,
     pipPercentOfSales: safeDivide(inputs.weeklyPipCost, inputs.netSalesActual),
@@ -187,9 +194,9 @@ export function calculateWeeklyLabor(inputs: WeeklyLaborInputs): WeeklyLaborMetr
 
   return {
     budgetToActualHoursVariance: inputs.actualHours - inputs.budgetedHours,
-    budgetToActualPercentVariance: safeDivide(inputs.actualHours, inputs.budgetedHours) - 1,
+    budgetToActualPercentVariance: percentChange(inputs.actualHours, inputs.budgetedHours),
     scheduleToActualHoursVariance: inputs.actualHours - inputs.scheduledHours,
-    scheduleToActualPercentVariance: safeDivide(inputs.actualHours, inputs.scheduledHours) - 1,
+    scheduleToActualPercentVariance: percentChange(inputs.actualHours, inputs.scheduledHours),
     actualHoursDailyAverage: inputs.actualHours / 7,
     salesPerLaborHour: safeDivide(inputs.netSalesActual, inputs.actualHours),
     goalSalesPerLaborHour: safeDivide(inputs.netSalesGoal, inputs.budgetedHours),
